@@ -1,0 +1,35 @@
+#!/bin/bash
+# BASH shell script to run dada2 in a docker container.
+# Saved as /usr/local/bin/run-dada2
+#
+# Notes:
+#
+# 1. Input files are assumed to be present in the directory where
+#    this command is run.
+# 2. This container simply runs Rscript by default and a script can
+#    be provided as the first argument. If a command other than
+#    Rscript is required, it can be specified using the --entrypoint
+#    docker argument.
+# 3. User must have either
+#    a. sudo access to run this script (script should be run
+#       as sudo run-dada2) or
+#    b. user must be part of the docker group
+# 4. Default user is dada2
+
+echo "Running command: Rscript $*"
+
+# Get current user
+CURRENT_USER=$(logname)
+
+# Get current user id
+CURRENT_UID=$(id -u ${CURRENT_USER})
+
+# Run container
+docker run --rm \
+       -e LOGNAME=${CURRENT_USER} \
+       -e USER=${CURRENT_USER} \
+       -u ${CURRENT_UID}:${CURRENT_UID} \
+       -v $(pwd):/home/stanislav/Docker \ # a custom directory you have your seqs and scripts
+       -w /home/stanislav/Docker \ # see above
+       vimalkvn/dada2 $*
+
