@@ -1,0 +1,64 @@
+library(dada2); packageVersion("dada2")
+library(ggplot2)
+getwd()
+
+
+setwd("/home/stanislav/Docker")
+getwd()
+
+path <- "/home/stanislav/Docker/"
+list.files(path)
+fnFs <- sort(list.files(path, pattern="2_1.fastq", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern="2_2.fastq", full.names = TRUE))
+
+sample.names <- basename(fnFs)
+sample.names
+p1<-plotQualityProfile(fnFs[1:9])
+p2<-plotQualityProfile(fnRs[1:9])
+
+library(ggplot2)
+ggsave("fon4_ileum1_qc_fs.pdf",plot=p1, width = 60, height = 60, units = "cm")
+ggsave("fon4_ileum1_qc_rs.pdf",plot=p2, width = 60, height = 60, units = "cm")
+
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+filtFs
+out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs,trimLeft=c(21,19), truncLen=c(295,270),
+              maxN=0, maxEE=c(4,7), truncQ=2, rm.phix=TRUE,
+              compress=TRUE, multithread=TRUE)
+head(out)
+
+errF <- learnErrors(filtFs, multithread=TRUE)
+errR <- learnErrors(filtRs, multithread=TRUE)
+derepFs <- derepFastq(filtFs, verbose=TRUE)
+derepRs <- derepFastq(filtRs, verbose=TRUE)
+# Name the derep-class objects by the sample names
+names(derepFs) <- sample.names
+names(derepRs) <- sample.names
+
+dadaFs <- dada(derepFs, err=errF, multithread=TRUE)
+dadaRs <- dada(derepRs, err=errR, multithread=TRUE)
+
+mergers <- mergePairs(dadaFs, derepFs, dadaRs, derepRs, verbose=TRUE,maxMismatch=5)
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+table(nchar(getSequences(seqtab)))
+
+seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=TRUE, verbose=TRUE)
+dim(seqtab.nochim)
+
+sum(seqtab.nochim)/sum(seqtab)
+
+getN <- function(x) sum(getUniques(x))
+track <- cbind(out, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers, getN), rowSums(seqtab.nochim))
+# If processing a single sample, remove the sapply calls: e.g. replace sapply(dadaFs, getN) with getN(dadaFs)
+rownames(track) <- sample.names
+head(track)
+saveRDS(track,file= "track_fon4_ileum1.rds")
+taxa <- assignTaxonomy(seqtab.nochim, "silva_nr_v132_train_set.fa", multithread=TRUE) 
+taxa <- addSpecies(taxa, "silva_species_assignment_v132.fa.gz")
+saveRDS(taxa, file="taxa_fon4_ileum1.rds")
+saveRDS(seqtab.nochim, file="seqtab.nochim_fon4_ileum1.rds")
+
+
+
